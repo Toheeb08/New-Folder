@@ -1,0 +1,53 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Roast vs Hype AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body class="mode-roast">
+    <main class="app">
+      <header class="header">
+        <h1 class="logo">Roast vs Hype AI</h1>
+        <div class="controls">
+          <button id="modeToggle" class="mode-btn">🔥 Savage Roast</button>
+        </div>
+      </header>
+
+      <section class="composer">
+        <label for="target" class="label">Who/what to judge</label>
+        <textarea id="target" placeholder="Enter a person, project, or thing to roast or hype..." rows="4"></textarea>
+        <div class="actions">
+          <button id="submitBtn" class="primary">Unleash</button>
+          <div id="spinner" class="spinner" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section id="resultWrap" class="results hidden">
+        <div id="card" class="result-card">
+          <div class="badge-row">
+            <div id="badge" class="badge">🔥 Roast</div>
+            <div id="stat" class="stat">Damage Level: <span id="statScore">—</span></div>
+          </div>
+          <h2 id="headline" class="headline">Headline</h2>
+          <p id="commentary" class="commentary">Commentary</p>
+          <div id="verdict" class="verdict">Verdict</div>
+        </div>
+
+        <div class="result-actions">
+          <button id="downloadBtn" class="secondary">Download PNG</button>
+          <button id="copyBtn" class="secondary">Copy Text</button>
+        </div>
+      </section>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
