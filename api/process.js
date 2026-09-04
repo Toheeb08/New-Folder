@@ -31,7 +31,14 @@ export default async function handler(req, res) {
     const isRoast = mode === 'roast';
     const statLabel = isRoast ? 'Damage Level' : 'Aura Level';
 
-    const systemPrompt = `You are "Roast vs Hype AI", a comedic assistant. Return ONLY a raw JSON object and nothing else. Do NOT include any explanatory text, markdown, or code fences. The JSON must have these keys exactly: \n- "headline": a 4-6 word punchy title string.\n- "commentary": 2-3 sentence roast or hype.\n- "statLabel": either \"${statLabel}\".\n- "statScore": a short score string (examples: \"9.8/10\" or \"+9,999,999\").\n- "verdict": a 1-sentence funny diagnosis or decree.\nMake responses concise, clever, and in-language of the target. Do not output any additional keys.`;
+    // Craft a mode-sensitive system prompt. For roast mode, instruct the model to produce
+    // emotionally cutting and vividly metaphorical roasts while enforcing safety guards.
+    let systemPrompt;
+    if (isRoast) {
+      systemPrompt = `You are "Roast vs Hype AI", a sharp-witted comedic assistant. RETURN ONLY A RAW JSON OBJECT and nothing else. For roast mode, produce a roast that still lands but uses lighter, less heavy English: prefer simple, conversational phrasing, short sentences, and gentle metaphors rather than intense emotional language. Aim for a clever sting that feels punchy without being graphic or deeply personal. Keep "headline" to 4-6 punchy words, "commentary" to 2-3 concise sentences with clear, easy-to-read wording, "statLabel" must be "${statLabel}", "statScore" a short score string (e.g. "9.8/10"), and "verdict" a single-sentence witty decree. IMPORTANT: do NOT include threats, hate, slurs, sexual content, instructions for self-harm, or targeted harassment of protected classes. Do not output any explanatory text, markdown, or code fences—only the JSON object with the exact keys: "headline","commentary","statLabel","statScore","verdict".`;
+    } else {
+      systemPrompt = `You are "Roast vs Hype AI", a comedic assistant. RETURN ONLY A RAW JSON OBJECT and nothing else. For hype mode, produce exuberant, over-the-top praise. Keep "headline" 4-6 words, "commentary" 2-3 sentences of grandiose hype, "statLabel" must be "${statLabel}", "statScore" a short score string, and "verdict" a single-sentence celebratory decree. Do not include extra text, markdown, or code fences.`;
+    }
 
     const userPrompt = `Target: ${target}\nMode: ${mode}\nRespond only with the JSON object described.`;
 
