@@ -8,10 +8,10 @@ Quick steps to run locally (no Vercel required):
 npm install express dotenv
 ```
 
-2. Add your GMI Cloud API key to `.env`:
+2. Add your Gemini API key to `.env`:
 
 ```ini
-GMICLOUD_API_KEY=your_real_key_here
+GEMINI_API_KEY=your_real_key_here
 ```
 
 3. Start the local server:
@@ -24,4 +24,4 @@ npm run dev
 
 Notes:
 - The Express server in `server.js` mounts the Vercel-style function at `/api/process` so frontend requests work unchanged.
-- For production deploy to Vercel, set `GMICLOUD_API_KEY` in the Vercel Environment Variables and deploy the repo — Vercel will use the existing `api/process.js` as a serverless function.
+- For production deploy to Vercel, set `GEMINI_API_KEY` in the environment variables and deploy the repo — Vercel will use the existing `api/process.js` as a serverless function.

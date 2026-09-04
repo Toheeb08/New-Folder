@@ -1,3 +1,116 @@
+export function buildGeminiRequest({ apiKey, systemPrompt, userPrompt }) {
+  return {
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      contents: [{
+        role: 'user',
+        parts: [{ text: userPrompt }]
+      }],
+      generationConfig: {
+        temperature: 0.85,
+        maxOutputTokens: 400,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            headline: { type: 'STRING' },
+            commentary: { type: 'STRING' },
+            statLabel: { type: 'STRING' },
+            statScore: { type: 'STRING' },
+            verdict: { type: 'STRING' }
+          },
+          required: ['headline', 'commentary', 'statLabel', 'statScore', 'verdict']
+        }
+      }
+    })
+  };
+}
+
+export function extractGeminiText(data) {
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part?.text)
+    ?.filter(Boolean)
+    ?.join('') || '';
+
+  return text;
+}
+
+export function parseGeminiJsonOutput(content, fallback = { statLabel: 'Aura Level', statScore: '—', verdict: '—' }) {
+  const cleaned = String(content || '').replace(/```+/g, '').replace(/`+/g, '').trim();
+  const jsonStart = cleaned.indexOf('{');
+  const jsonEnd = cleaned.lastIndexOf('}');
+
+  let candidate = null;
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
+    candidate = cleaned.slice(jsonStart, jsonEnd + 1);
+  }
+
+  const attempts = [];
+  if (candidate) {
+    attempts.push(candidate);
+    attempts.push(candidate.replace(/,\s*}/g, '}').replace(/,\s*\]/g, ']'));
+    attempts.push(candidate.replace(/([{,]\s*)([A-Za-z0-9_]+)(\s*:)/g, '$1"$2"$3'));
+    attempts.push(candidate.replace(/\n/g, ' '));
+  }
+
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch {
+      // continue trying
+    }
+  }
+
+  const looseMatch = cleaned.match(/"headline"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i);
+  const commentaryMatch = cleaned.match(/"commentary"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i);
+  const statLabelMatch = cleaned.match(/"statLabel"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i);
+  const statScoreMatch = cleaned.match(/"statScore"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i);
+  const verdictMatch = cleaned.match(/"verdict"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i);
+
+  const partial = {
+    headline: looseMatch?.[1] || fallback.headline || '',
+    commentary: commentaryMatch?.[1] || fallback.commentary || '',
+    statLabel: statLabelMatch?.[1] || fallback.statLabel || '',
+    statScore: statScoreMatch?.[1] || fallback.statScore || '',
+    verdict: verdictMatch?.[1] || fallback.verdict || ''
+  };
+
+  if (!partial.statLabel && fallback.statLabel) partial.statLabel = fallback.statLabel;
+  if (!partial.statScore && fallback.statScore) partial.statScore = fallback.statScore;
+  if (!partial.verdict && fallback.verdict) partial.verdict = fallback.verdict;
+
+  return Object.values(partial).some(Boolean) ? partial : null;
+}
+
+export function buildFallbackResult({ target, mode, statLabel }) {
+  const isRoast = mode === 'roast';
+  const displayTarget = String(target || 'this idea').trim();
+
+  if (isRoast) {
+    return {
+      headline: `${displayTarget} Needs a Timeout`,
+      commentary: `This one keeps talking like it is the main event, but the room is already checking out. It has big energy, very little polish, and a lot of noise with no real bite.`,
+      statLabel: statLabel,
+      statScore: '8.6/10',
+      verdict: `${displayTarget} is loud, messy, and still somehow memorable.`
+    };
+  }
+
+  return {
+    headline: `${displayTarget} Is Peak Energy`,
+    commentary: `This is the kind of move that turns a normal concept into a full-blown moment. It has vision, swagger, and the kind of confidence that makes people stop and pay attention.`,
+    statLabel: statLabel,
+    statScore: '9.7/10',
+    verdict: `${displayTarget} is basically the main character of the entire room.`
+  };
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -5,7 +118,6 @@ export default async function handler(req, res) {
       return;
     }
 
-    // body may be parsed by platform or need to be read
     const body = req.body && Object.keys(req.body).length ? req.body : await new Promise((r) => {
       let data = '';
       req.on && req.on('data', (chunk) => (data += chunk));
@@ -22,17 +134,15 @@ export default async function handler(req, res) {
       return;
     }
 
-    const GMICLOUD_API_KEY = process.env.GMICLOUD_API_KEY;
-    if (!GMICLOUD_API_KEY) {
-      res.status(500).json({ error: 'Missing GMICLOUD_API_KEY in environment' });
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GMICLOUD_API_KEY;
+    if (!GEMINI_API_KEY) {
+      res.status(500).json({ error: 'Missing GEMINI_API_KEY in environment' });
       return;
     }
 
     const isRoast = mode === 'roast';
     const statLabel = isRoast ? 'Damage Level' : 'Aura Level';
 
-    // Craft a mode-sensitive system prompt. For roast mode, instruct the model to produce
-    // emotionally cutting and vividly metaphorical roasts while enforcing safety guards.
     let systemPrompt;
     if (isRoast) {
       systemPrompt = `You are "Roast vs Hype AI", a sharp-witted comedic assistant. RETURN ONLY A RAW JSON OBJECT and nothing else. For roast mode, produce a roast that still lands but uses lighter, less heavy English: prefer simple, conversational phrasing, short sentences, and gentle metaphors rather than intense emotional language. Aim for a clever sting that feels punchy without being graphic or deeply personal. Keep "headline" to 4-6 punchy words, "commentary" to 2-3 concise sentences with clear, easy-to-read wording, "statLabel" must be "${statLabel}", "statScore" a short score string (e.g. "9.8/10"), and "verdict" a single-sentence witty decree. IMPORTANT: do NOT include threats, hate, slurs, sexual content, instructions for self-harm, or targeted harassment of protected classes. Do not output any explanatory text, markdown, or code fences—only the JSON object with the exact keys: "headline","commentary","statLabel","statScore","verdict".`;
@@ -41,24 +151,12 @@ export default async function handler(req, res) {
     }
 
     const userPrompt = `Target: ${target}\nMode: ${mode}\nRespond only with the JSON object described.`;
+    const request = buildGeminiRequest({ apiKey: GEMINI_API_KEY, systemPrompt, userPrompt });
 
-    const payload = {
-      model: 'MiniMaxAI/MiniMax-M3',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.85,
-      max_tokens: 400
-    };
-
-    const response = await fetch('https://api.gmi-serving.com/v1/chat/completions', {
+    const response = await fetch(request.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GMICLOUD_API_KEY}`
-      },
-      body: JSON.stringify(payload)
+      headers: request.headers,
+      body: request.body
     });
 
     if (!response.ok) {
@@ -68,39 +166,16 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json().catch(() => null);
-    const content = (data && (data.choices?.[0]?.message?.content || data.choices?.[0]?.text)) || JSON.stringify(data) || '';
+    const content = extractGeminiText(data) || JSON.stringify(data) || '';
+    const parsed = parseGeminiJsonOutput(content, { statLabel, statScore: '—', verdict: '—' });
 
-    // Strip markdown backticks and fences
-    let cleaned = String(content).replace(/```+/g, '').replace(/`+/g, '').trim();
-
-    // Extract first JSON object in the response
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      res.status(500).json({ error: 'Model did not return JSON', raw: cleaned });
-      return;
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch (err) {
-      // try to recover common issues like trailing commas
-      try {
-        const relaxed = jsonMatch[0].replace(/,\s*}/g, '}').replace(/,\s*\]/g, ']');
-        parsed = JSON.parse(relaxed);
-      } catch (err2) {
-        res.status(500).json({ error: 'Failed to parse JSON from model', raw: jsonMatch[0] });
-        return;
-      }
-    }
-
-    // Enforce required keys and fill defaults if necessary
+    const fallback = buildFallbackResult({ target, mode, statLabel });
     const result = {
-      headline: parsed.headline || '',
-      commentary: parsed.commentary || '',
-      statLabel: parsed.statLabel || statLabel,
-      statScore: parsed.statScore || '',
-      verdict: parsed.verdict || ''
+      headline: parsed?.headline || fallback.headline,
+      commentary: parsed?.commentary || fallback.commentary,
+      statLabel: parsed?.statLabel || statLabel,
+      statScore: parsed?.statScore || fallback.statScore,
+      verdict: parsed?.verdict || fallback.verdict
     };
 
     res.setHeader('Content-Type', 'application/json');
